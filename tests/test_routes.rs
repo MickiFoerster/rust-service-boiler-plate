@@ -81,15 +81,7 @@ async fn register_returns_422_when_data_is_missing() {
 }
 
 async fn spawn_app() -> (SocketAddr, sqlx::Pool<sqlx::Postgres>) {
-    let database_uri = std::env::var("DATABASE_URI").unwrap_or(String::from(
-        "postgresql://postgres:password@localhost:5432/postgres",
-    ));
-
-    let db_pool = PgPoolOptions::new()
-        .max_connections(512)
-        .connect(&database_uri)
-        .await
-        .expect("cannot connect to the database");
+    let db_pool = setup_database().await;
 
     let server = registration::startup::run("127.0.0.1:0", db_pool.clone())
         .expect("could not bind server address");
@@ -101,4 +93,35 @@ async fn spawn_app() -> (SocketAddr, sqlx::Pool<sqlx::Postgres>) {
     println!("server listens under {addr}");
 
     (addr, db_pool)
+}
+
+async fn setup_database() -> sqlx::Pool<sqlx::Postgres> {
+    use sqlx::{Connection, Executor};
+
+    let database_uri = std::env::var("DATABASE_URI").unwrap_or(String::from(
+        "postgresql://postgres:password@localhost:5432",
+    ));
+
+    let test_db_name = uuid::Uuid::new_v4().to_string();
+    let mut conn = sqlx::PgConnection::connect(&database_uri)
+        .await
+        .expect("Failed to connect to Postgres");
+    conn.execute(format!(r#" CREATE DATABASE "{}"; "#, test_db_name).as_str())
+        .await
+        .expect("Failed to create test database");
+
+    let database_uri = format!("{}/{}", database_uri, test_db_name);
+
+    let db_pool = PgPoolOptions::new()
+        .max_connections(512)
+        .connect(&database_uri)
+        .await
+        .expect("cannot connect to the database");
+
+    sqlx::migrate!("./migrations")
+        .run(&db_pool)
+        .await
+        .expect("Failed to migrate the database");
+
+    db_pool
 }
