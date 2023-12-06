@@ -22,13 +22,29 @@ pub async fn post_registration_handler(
     eprintln!("registry_input:name:{:#?}", registry_input.name);
     eprintln!("registry_input:email:{:#?}", registry_input.email);
 
+    let email = registry_input.email.to_lowercase();
+    let email = email.trim();
+    let name = registry_input.name.trim();
+
     let result = sqlx::query!(
         r#"
-       select * from registrations
-                              "#
+            insert into registrations (
+                email,
+                name
+            )
+            values (
+                $1,
+                $2
+            )
+    "#,
+        email,
+        name,
     )
-    .fetch_optional(&state.db_pool)
+    .execute(&state.db_pool)
     .await
-    .expect("DB query failed");
+    .expect("insertion to DB failed");
+
+    eprintln!("{:#?}", result);
+
     (StatusCode::OK, Json(serde_json::json!(registry_input))).into_response()
 }

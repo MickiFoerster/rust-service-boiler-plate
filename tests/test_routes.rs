@@ -25,7 +25,11 @@ async fn register_returns_200_for_valid_form_data() {
     let client = reqwest::Client::new();
 
     let url = format!("http://{}/registrations", addr);
-    let body = "name=Max%20Mustermann&email=max.mustermann@gmail.com";
+
+    let expected_name = "Max Mustermann";
+    let expected_email = "max.mustermann@gmail.com";
+
+    let body = format!("name={}&email={}", expected_name, expected_email);
     let response = client
         .post(url)
         .header("Content-Type", "application/x-www-form-urlencoded")
@@ -36,10 +40,13 @@ async fn register_returns_200_for_valid_form_data() {
 
     assert_eq!(200u16, response.status().as_u16());
 
-    let _data = sqlx::query!("SELECT email, name FROM registrations")
+    let data = sqlx::query!("SELECT email, name FROM registrations")
         .fetch_one(&db_pool)
         .await
         .expect("database query failed");
+
+    assert_eq!(data.email.expect("no email found"), expected_email);
+    assert_eq!(data.name.expect("no name found"), expected_name);
 }
 
 /// table-driven test or parametrised test for checking failures of subscriptions
