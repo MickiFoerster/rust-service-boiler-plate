@@ -1,6 +1,92 @@
 use std::net::SocketAddr;
 
-use sqlx::postgres::PgPoolOptions;
+use sqlx::{
+    postgres::PgPoolOptions,
+    {Connection, Executor},
+};
+
+struct TestDatabase {
+    user: String,
+    password: String,
+    host: String,
+    port: u16,
+    database_name: String,
+}
+
+impl TestDatabase {
+    pub async fn new(user: String, password: String, host: String, port: u16) -> Self {
+        let test_db = Self {
+            user,
+            password,
+            host,
+            port,
+            database_name: uuid::Uuid::new_v4().to_string(),
+        };
+
+        let mut conn = sqlx::PgConnection::connect(&test_db.service_uri())
+            .await
+            .expect("Failed to connect to Postgres");
+
+        conn.execute(format!(r#" CREATE DATABASE "{}"; "#, test_db.database_name).as_str())
+            .await
+            .expect("Failed to create test database");
+
+        let mut conn = sqlx::PgConnection::connect(&test_db.database_uri())
+            .await
+            .expect("Failed to connect to Postgres");
+
+        sqlx::migrate!("./migrations")
+            .run(&mut conn)
+            .await
+            .expect("Failed to migrate the database");
+
+        println!("created test database {}", test_db.database_uri());
+
+        test_db
+    }
+
+    pub async fn connection_pool(&self) -> sqlx::PgPool {
+        PgPoolOptions::new()
+            .max_connections(2)
+            .connect(&self.database_uri())
+            .await
+            .expect("cannot connect to the database")
+    }
+
+    fn service_uri(&self) -> String {
+        let user = &self.user;
+        let password = &self.password;
+        let host = &self.host;
+        let port = self.port;
+        format!("postgresql://{user}:{password}@{host}:{port}")
+    }
+
+    fn database_uri(&self) -> String {
+        let database_name = &self.database_name;
+        format!("{}/{}", self.service_uri(), database_name)
+    }
+}
+
+impl Drop for TestDatabase {
+    fn drop(&mut self) {
+        let db_name = self.database_name.clone();
+        println!("database {} is going out of scope ...", db_name);
+
+        println!("Test database {} was dropped.", db_name);
+    }
+}
+
+async fn setup_database() -> sqlx::Pool<sqlx::Postgres> {
+    TestDatabase::new(
+        String::from("postgres"),
+        String::from("password"),
+        String::from("localhost"),
+        5432,
+    )
+    .await
+    .connection_pool()
+    .await
+}
 
 #[tokio::test]
 async fn health_check_works() {
@@ -93,35 +179,4 @@ async fn spawn_app() -> (SocketAddr, sqlx::Pool<sqlx::Postgres>) {
     println!("server listens under {addr}");
 
     (addr, db_pool)
-}
-
-async fn setup_database() -> sqlx::Pool<sqlx::Postgres> {
-    use sqlx::{Connection, Executor};
-
-    let database_uri = std::env::var("DATABASE_URI").unwrap_or(String::from(
-        "postgresql://postgres:password@localhost:5432",
-    ));
-
-    let test_db_name = uuid::Uuid::new_v4().to_string();
-    let mut conn = sqlx::PgConnection::connect(&database_uri)
-        .await
-        .expect("Failed to connect to Postgres");
-    conn.execute(format!(r#" CREATE DATABASE "{}"; "#, test_db_name).as_str())
-        .await
-        .expect("Failed to create test database");
-
-    let database_uri = format!("{}/{}", database_uri, test_db_name);
-
-    let db_pool = PgPoolOptions::new()
-        .max_connections(512)
-        .connect(&database_uri)
-        .await
-        .expect("cannot connect to the database");
-
-    sqlx::migrate!("./migrations")
-        .run(&db_pool)
-        .await
-        .expect("Failed to migrate the database");
-
-    db_pool
 }
