@@ -76,6 +76,7 @@ impl TestDatabase {
     }
 }
 
+/*
 impl Drop for TestDatabase {
     fn drop(&mut self) {
         let db_name = self.database_name.clone();
@@ -115,3 +116,4 @@ impl Drop for TestDatabase {
         println!("Test database {} was dropped.", db_name);
     }
 }
+*/
