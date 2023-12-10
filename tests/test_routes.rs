@@ -4,15 +4,13 @@ mod testdatabase;
 
 use testdatabase::TestDatabase;
 
-async fn setup_database() -> sqlx::Pool<sqlx::Postgres> {
+async fn setup_database() -> TestDatabase {
     TestDatabase::new(
         String::from("postgres"),
         String::from("password"),
         String::from("localhost"),
         5432,
     )
-    .await
-    .connection_pool()
     .await
 }
 
@@ -35,7 +33,8 @@ async fn health_check_works() {
 
 #[tokio::test]
 async fn register_returns_200_for_valid_form_data() {
-    let (addr, db_pool) = spawn_app().await;
+    let (addr, test_db) = spawn_app().await;
+    eprintln!("test app is running ...");
     let client = reqwest::Client::new();
 
     let url = format!("http://{}/registrations", addr);
@@ -55,12 +54,15 @@ async fn register_returns_200_for_valid_form_data() {
     assert_eq!(200u16, response.status().as_u16());
 
     let data = sqlx::query!("SELECT email, name FROM registrations")
-        .fetch_one(&db_pool)
+        .fetch_one(&test_db.connection_pool().await)
         .await
         .expect("database query failed");
 
     assert_eq!(data.email.expect("no email found"), expected_email);
     assert_eq!(data.name.expect("no name found"), expected_name);
+    eprintln!("test register_returns_200_for_valid_form_data finished");
+
+    test_db.close().await;
 }
 
 /// table-driven test or parametrised test for checking failures of subscriptions
@@ -94,10 +96,10 @@ async fn register_returns_422_when_data_is_missing() {
     }
 }
 
-async fn spawn_app() -> (SocketAddr, sqlx::Pool<sqlx::Postgres>) {
-    let db_pool = setup_database().await;
+async fn spawn_app() -> (SocketAddr, TestDatabase) {
+    let test_db = setup_database().await;
 
-    let server = registration::startup::run("127.0.0.1:0", db_pool.clone())
+    let server = registration::startup::run("127.0.0.1:0", test_db.connection_pool().await.clone())
         .expect("could not bind server address");
 
     let addr = server.local_addr();
@@ -106,5 +108,5 @@ async fn spawn_app() -> (SocketAddr, sqlx::Pool<sqlx::Postgres>) {
 
     println!("server listens under {addr}");
 
-    (addr, db_pool)
+    (addr, test_db)
 }

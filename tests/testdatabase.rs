@@ -1,10 +1,9 @@
-use std::io::Write;
-
 use sqlx::{
     postgres::PgPoolOptions,
     {Connection, Executor},
 };
 
+#[derive(Clone)]
 pub struct TestDatabase {
     user: String,
     password: String,
@@ -55,6 +54,22 @@ impl TestDatabase {
         test_db
     }
 
+    pub async fn close(&self) {
+        if let Some(pool) = &self.connection_pool {
+            pool.close().await;
+        }
+
+        let mut conn = sqlx::PgConnection::connect(&self.service_uri())
+            .await
+            .expect("Failed to connect to Postgres");
+
+        conn.execute(format!(r#" DROP DATABASE "{}"; "#, self.database_name).as_str())
+            .await
+            .expect("Failed to drop test database");
+
+        eprintln!("database {} dropped", self.database_name);
+    }
+
     pub async fn connection_pool(&self) -> sqlx::PgPool {
         self.connection_pool
             .as_ref()
@@ -75,45 +90,3 @@ impl TestDatabase {
         format!("{}/{}", self.service_uri(), database_name)
     }
 }
-
-/*
-impl Drop for TestDatabase {
-    fn drop(&mut self) {
-        let db_name = self.database_name.clone();
-        println!("database {} is going out of scope ...", db_name);
-
-        let mut envs = std::collections::HashMap::new();
-        envs.insert("PGUSER", "postgres");
-        envs.insert("PGPASSWORD", "password");
-        envs.insert("PGHOST", "localhost");
-        envs.insert("PGPORT", "5432");
-        envs.insert("PGDATABASE", "postgres");
-
-        let mut cmd = std::process::Command::new("psql")
-            .envs(&envs)
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .spawn()
-            .expect("psql command failed");
-
-        let mut stdin = cmd
-            .stdin
-            .take()
-            .expect("Failed to take stdin from psql command");
-
-        let db_name2 = db_name.clone();
-        std::thread::spawn(move || {
-            //let input = format!(" DROP DATABASE \"{}\";\n ", db_name2);
-            let input = format!(" \\dt \n ");
-
-            stdin
-                .write_all(input.as_bytes())
-                .expect("Failed to write to psql command");
-        });
-
-        cmd.wait().expect("Failed to execute psql command");
-
-        println!("Test database {} was dropped.", db_name);
-    }
-}
-*/
