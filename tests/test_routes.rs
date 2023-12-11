@@ -16,7 +16,7 @@ async fn setup_database() -> TestDatabase {
 
 #[tokio::test]
 async fn health_check_works() {
-    let (addr, _db_pool) = spawn_app().await;
+    let (addr, test_db) = spawn_app().await;
     let url = format!("http://{}/health_check", addr);
 
     let client = reqwest::Client::new();
@@ -29,6 +29,8 @@ async fn health_check_works() {
 
     assert!(response.status().is_success());
     assert_eq!(Some(0), response.content_length());
+
+    test_db.close().await;
 }
 
 #[tokio::test]
@@ -68,7 +70,7 @@ async fn register_returns_200_for_valid_form_data() {
 /// table-driven test or parametrised test for checking failures of subscriptions
 #[tokio::test]
 async fn register_returns_422_when_data_is_missing() {
-    let (addr, _db_pool) = spawn_app().await;
+    let (addr, test_db) = spawn_app().await;
     let client = reqwest::Client::new();
     let test_cases = vec![
         ("name=Max%Mustermann", "missing the email"),
@@ -94,6 +96,8 @@ async fn register_returns_422_when_data_is_missing() {
             error_message
         );
     }
+
+    test_db.close().await;
 }
 
 async fn spawn_app() -> (SocketAddr, TestDatabase) {
