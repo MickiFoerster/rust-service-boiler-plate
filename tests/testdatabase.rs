@@ -14,7 +14,7 @@ pub struct TestDatabase {
 }
 
 impl TestDatabase {
-    pub async fn new(user: String, password: String, host: String, port: u16) -> Self {
+    pub async fn new(user: String, password: String, host: String, port: u16) -> Box<Self> {
         let mut test_db = Self {
             user,
             password,
@@ -51,7 +51,7 @@ impl TestDatabase {
 
         test_db.connection_pool = Some(pool);
 
-        test_db
+        Box::new(test_db)
     }
 
     pub async fn close(&self) {
@@ -88,5 +88,11 @@ impl TestDatabase {
     fn database_uri(&self) -> String {
         let database_name = &self.database_name;
         format!("{}/{}", self.service_uri(), database_name)
+    }
+}
+
+impl Drop for TestDatabase {
+    fn drop(&mut self) {
+        eprintln!("test database is dropped");
     }
 }

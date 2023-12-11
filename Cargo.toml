@@ -8,7 +8,7 @@ path = "src/lib.rs"
 
 [[bin]]
 path = "src/main.rs"
-name = "flutlicht-anmeldung-registration-service"
+name = "registration-service"
 
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }
@@ -30,6 +30,8 @@ clap = { version = "4.4.10", features = ["derive", "env"] }
 uuid = { version = "1.6.1", features = ["v4"] }
 chrono = { version = "0.4.31", features = ["serde"] }
 postgres = "0.19.7"
+axum-server = "0.5.1"
+tracing = "0.1.40"
 
 [dev-dependencies]
 reqwest = "0.11"
