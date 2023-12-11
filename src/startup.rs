@@ -29,8 +29,6 @@ pub fn run(
 
     println!("start server ...");
     let server = Server::bind(&addr).serve(app.into_make_service());
-    // .with_graceful_shutdown(shutdown_signal()) look example
-    //
 
     println!("bound to address: {:#?}", server.local_addr());
 

@@ -4,7 +4,7 @@ mod testdatabase;
 
 use testdatabase::TestDatabase;
 
-async fn setup_database() -> TestDatabase {
+async fn setup_database() -> Box<TestDatabase> {
     TestDatabase::new(
         String::from("postgres"),
         String::from("password"),
@@ -100,7 +100,7 @@ async fn register_returns_422_when_data_is_missing() {
     test_db.close().await;
 }
 
-async fn spawn_app() -> (SocketAddr, TestDatabase) {
+async fn spawn_app() -> (SocketAddr, Box<TestDatabase>) {
     let test_db = setup_database().await;
 
     let server = registration::startup::run("127.0.0.1:0", test_db.connection_pool().await.clone())

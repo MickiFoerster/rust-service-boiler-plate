@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use clap::Parser;
 
 use registration::{cli::Args, startup::run};
@@ -17,5 +19,33 @@ async fn main() -> anyhow::Result<()> {
         .await
         .expect("cannot connect to the database");
 
-    Ok(run(&addr, db_pool)?.await?)
+    let handle = axum_server::Handle::new();
+    let shutdown_future = shutdown_signal(handle.clone());
+
+    Ok(run(&addr, db_pool)?
+        .with_graceful_shutdown(shutdown_future)
+        .await?)
+}
+
+async fn shutdown_signal(handle: axum_server::Handle) {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    eprintln!("Received termination signal shutting down");
+    handle.graceful_shutdown(Some(Duration::from_secs(10))); // 10 secs is how long docker will wait
 }
