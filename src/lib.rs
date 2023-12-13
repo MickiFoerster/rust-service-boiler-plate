@@ -2,4 +2,7 @@ pub mod cli;
 pub mod routes;
 pub mod startup;
 
-pub use startup::AppState;
+#[derive(Clone)]
+pub struct AppState {
+    pub db_pool: sqlx::PgPool,
+}
