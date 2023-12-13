@@ -44,7 +44,8 @@ pub async fn post_registration_handler(
     .await
     .expect("insertion to DB failed");
 
-    eprintln!("{:#?}", result);
+    std::thread::sleep(std::time::Duration::from_secs(5));
+    tracing::debug!("{:#?}", result);
 
     (StatusCode::OK, Json(serde_json::json!(registry_input))).into_response()
 }
