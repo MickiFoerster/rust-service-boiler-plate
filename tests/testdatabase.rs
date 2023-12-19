@@ -54,8 +54,9 @@ impl TestDatabase {
         Box::new(test_db)
     }
 
-    pub async fn close(&self) {
-        if let Some(pool) = &self.connection_pool {
+    pub async fn close(&mut self) {
+        let pool = self.connection_pool.take();
+        if let Some(pool) = pool {
             pool.close().await;
         }
 
@@ -93,6 +94,10 @@ impl TestDatabase {
 
 impl Drop for TestDatabase {
     fn drop(&mut self) {
-        eprintln!("test database is dropped");
+        if self.connection_pool.is_some() {
+            eprintln!("test database connection pool was not closed");
+        } else {
+            eprintln!("test database is dropped");
+        }
     }
 }

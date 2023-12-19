@@ -16,7 +16,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "registration=debug,tower_http=debug".into()),
+                .unwrap_or_else(|_| "registration=debug,tower_http=info".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
@@ -53,9 +53,6 @@ async fn main() -> anyhow::Result<()> {
     let (close_tx, close_rx) = tokio::sync::watch::channel(());
 
     loop {
-        //let server = Server::bind(&addr).serve(app.into_make_service());
-
-        //println!("bound to address: {:#?}", server.local_addr());
         let (socket, remote_addr) = tokio::select! {
             result = listener.accept() => {
                 match result {
@@ -67,22 +64,16 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
             _ = shutdown_signal() => {
-                eprintln!("asdf");
                 tracing::debug!("signal received, not accepting new connections");
                 break;
             }
         };
 
-        tracing::debug!("connection {remote_addr} accepted");
+        tracing::debug!("connection from {remote_addr} accepted");
 
-        // We don't need to call `poll_ready` because `Router` is always ready.
         let tower_service = app.clone();
-
-        // Clone the watch receiver and move it into the task.
         let close_rx = close_rx.clone();
 
-        // Spawn a task to handle the connection. That way we can serve multiple connections
-        // concurrently.
         tokio::spawn(async move {
             // Hyper has its own `AsyncRead` and `AsyncWrite` traits and doesn't use tokio.
             // `TokioIo` converts between them.
