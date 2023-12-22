@@ -6,7 +6,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::AppState;
+use crate::startup::AppState;
 
 #[derive(Deserialize, Serialize)]
 pub struct RegistrationInput {
