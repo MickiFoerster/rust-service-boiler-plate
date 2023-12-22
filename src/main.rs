@@ -1,6 +1,7 @@
 use clap::Parser;
 use registration::cli::Args;
 use registration::startup::run_server;
+use sqlx::postgres::PgPoolOptions;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -15,7 +16,17 @@ async fn main() -> anyhow::Result<()> {
 
     let args = Args::parse();
 
-    let close_tx = run_server(args).await?;
+    let service_address = format!("127.0.0.1:{}", args.port);
+    println!("database uri: {}", args.database_uri);
+    println!("configured address: {}", service_address);
+
+    let db_pool = PgPoolOptions::new()
+        .max_connections(8)
+        .connect(&args.database_uri)
+        .await
+        .expect("cannot connect to the database");
+
+    let close_tx = run_server(&service_address, db_pool).await?;
 
     tracing::debug!("waiting for {} tasks to finish", close_tx.receiver_count());
     close_tx.closed().await;

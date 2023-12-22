@@ -103,14 +103,9 @@ async fn register_returns_422_when_data_is_missing() {
 async fn spawn_app() -> (SocketAddr, Box<TestDatabase>) {
     let test_db = setup_database().await;
 
-    let server = registration::startup::run("127.0.0.1:0", test_db.connection_pool().await.clone())
+    let close_tx = registration::startup::run_server("127.0.0.1:0", test_db.connection_pool())
+        .await
         .expect("could not bind server address");
-
-    let addr = server.local_addr();
-
-    let _ = tokio::spawn(async { server.await });
-
-    println!("server listens under {addr}");
 
     (addr, test_db)
 }

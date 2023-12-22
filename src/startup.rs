@@ -7,31 +7,20 @@ use axum::{
 };
 use hyper::body::Incoming;
 use hyper_util::rt::TokioIo;
-use sqlx::postgres::PgPoolOptions;
 use tokio::net::TcpStream;
 use tower::Service;
 
-use crate::{
-    cli::Args,
-    routes::{healthcheck, post_registration_handler},
-};
+use crate::routes::{healthcheck, post_registration_handler};
 
 #[derive(Clone)]
 pub struct AppState {
     pub db_pool: sqlx::PgPool,
 }
 
-pub async fn run_server(args: Args) -> anyhow::Result<tokio::sync::watch::Sender<()>> {
-    let service_address = format!("127.0.0.1:{}", args.port);
-    println!("database uri: {}", args.database_uri);
-    println!("configured address: {}", service_address);
-
-    let db_pool = PgPoolOptions::new()
-        .max_connections(8)
-        .connect(&args.database_uri)
-        .await
-        .expect("cannot connect to the database");
-
+pub async fn run_server(
+    service_address: &str,
+    db_pool: sqlx::PgPool,
+) -> anyhow::Result<tokio::sync::watch::Sender<()>> {
     let router = Router::new()
         .route("/health_check", get(healthcheck))
         .route("/registrations", post(post_registration_handler))
