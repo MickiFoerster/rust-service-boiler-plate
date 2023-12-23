@@ -7,7 +7,7 @@ use axum::{
 };
 use hyper::body::Incoming;
 use hyper_util::rt::TokioIo;
-use tokio::net::TcpStream;
+use tokio::{net::TcpStream, task::JoinHandle};
 use tower::Service;
 
 use crate::routes::{healthcheck, post_registration_handler};
@@ -20,7 +20,7 @@ pub struct AppState {
 pub async fn run_server(
     service_address: &str,
     db_pool: sqlx::PgPool,
-) -> anyhow::Result<(SocketAddr, tokio::sync::watch::Sender<()>)> {
+) -> anyhow::Result<(JoinHandle<()>, SocketAddr, tokio::sync::watch::Sender<()>)> {
     let router = Router::new()
         .route("/health_check", get(healthcheck))
         .route("/registrations", post(post_registration_handler))
@@ -32,38 +32,43 @@ pub async fn run_server(
 
     println!("bind server address ...");
     let listener = tokio::net::TcpListener::bind(service_address).await?;
+    let addr = listener.local_addr()?;
 
     let (close_tx, close_rx) = tokio::sync::watch::channel(());
 
-    loop {
-        let (socket, remote_addr) = tokio::select! {
-            result = listener.accept() => {
-                match result {
-                    Ok(stream) => stream,
-                    Err(e) => {
-                        tracing::error!("failed to accept connection: {e}");
-                        continue;
+    let join_handle = tokio::spawn(async move {
+        loop {
+            eprintln!("start server accept loop");
+
+            let (socket, remote_addr) = tokio::select! {
+                result = listener.accept() => {
+                    match result {
+                        Ok(stream) => stream,
+                        Err(e) => {
+                            tracing::error!("failed to accept connection: {e}");
+                            continue;
+                        }
                     }
                 }
-            }
-            _ = shutdown_signal() => {
-                tracing::debug!("signal received, not accepting new connections");
-                break;
-            }
-        };
+                _ = shutdown_signal() => {
+                    tracing::debug!("signal received, not accepting new connections");
+                    break;
+                }
+            };
 
-        tracing::debug!("connection from {remote_addr} accepted");
+            eprintln!("connection from {remote_addr} accepted");
 
-        let tower_service = router.clone();
-        let close_rx = close_rx.clone();
+            let tower_service = router.clone();
+            let close_rx = close_rx.clone();
 
-        tokio::spawn(async move { handle_client(socket, remote_addr, tower_service, close_rx) });
-    }
-    eprintln!("exit from loop");
+            tokio::spawn(async move {
+                handle_client(socket, remote_addr, tower_service, close_rx).await;
+            });
+        }
+        eprintln!("exit from loop");
+    });
 
-    drop(close_rx);
-
-    Ok((listener.local_addr()?, close_tx))
+    Ok((join_handle, addr, close_tx))
 }
 
 async fn handle_client(
@@ -72,6 +77,7 @@ async fn handle_client(
     tower_service: Router,
     close_rx: tokio::sync::watch::Receiver<()>,
 ) {
+    eprintln!("handle client start");
     let socket = TokioIo::new(socket);
 
     let hyper_service = hyper::service::service_fn(move |request: Request<Incoming>| {
@@ -82,11 +88,13 @@ async fn handle_client(
     // `graceful_shutdown` requires a pinned connection.
     let mut conn = std::pin::pin!(conn);
 
+    eprintln!("start loop for handling client");
     loop {
         tokio::select! {
             // Poll the connection. This completes when the client has closed the
             // connection, graceful shutdown has completed, or we encounter a TCP error.
             result = conn.as_mut() => {
+                    eprintln!("poll the connection");
                 if let Err(err) = result {
                     tracing::debug!("failed to serve connection: {err:#}");
                 }

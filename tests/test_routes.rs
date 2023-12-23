@@ -4,7 +4,7 @@ mod testdatabase;
 
 use registration::startup::run_server;
 use testdatabase::TestDatabase;
-use tokio::sync::watch::Sender;
+use tokio::{sync::watch::Sender, task::JoinHandle};
 
 async fn setup_database() -> Box<TestDatabase> {
     TestDatabase::new(
@@ -18,7 +18,7 @@ async fn setup_database() -> Box<TestDatabase> {
 
 #[tokio::test]
 async fn health_check_works() {
-    let (addr, _, mut test_db) = spawn_app().await;
+    let (_, addr, _, mut test_db) = spawn_app().await;
     let url = format!("http://{}/health_check", addr);
 
     let client = reqwest::Client::new();
@@ -37,7 +37,7 @@ async fn health_check_works() {
 
 #[tokio::test]
 async fn register_returns_200_for_valid_form_data() {
-    let (addr, _, mut test_db) = spawn_app().await;
+    let (_, addr, _, mut test_db) = spawn_app().await;
     eprintln!("test app is running ...");
     let client = reqwest::Client::new();
 
@@ -47,6 +47,7 @@ async fn register_returns_200_for_valid_form_data() {
     let expected_email = "max.mustermann@gmail.com";
 
     let body = format!("name={}&email={}", expected_name, expected_email);
+    eprintln!("try to reach to {url}");
     let response = client
         .post(url)
         .header("Content-Type", "application/x-www-form-urlencoded")
@@ -72,7 +73,7 @@ async fn register_returns_200_for_valid_form_data() {
 /// table-driven test or parametrised test for checking failures of subscriptions
 #[tokio::test]
 async fn register_returns_422_when_data_is_missing() {
-    let (addr, _, mut test_db) = spawn_app().await;
+    let (_, addr, _, mut test_db) = spawn_app().await;
     let client = reqwest::Client::new();
     let test_cases = vec![
         ("name=Max%Mustermann", "missing the email"),
@@ -102,12 +103,13 @@ async fn register_returns_422_when_data_is_missing() {
     test_db.close().await;
 }
 
-async fn spawn_app() -> (SocketAddr, Sender<()>, Box<TestDatabase>) {
+async fn spawn_app() -> (JoinHandle<()>, SocketAddr, Sender<()>, Box<TestDatabase>) {
     let test_db = setup_database().await;
 
-    let (local_addr, close_tx) = run_server("127.0.0.1:0", test_db.connection_pool().await)
-        .await
-        .expect("could not bind server address");
+    let (join_handle, local_addr, close_tx) =
+        run_server("127.0.0.1:0", test_db.connection_pool().await)
+            .await
+            .expect("could not bind server address");
 
-    (local_addr, close_tx, test_db)
+    (join_handle, local_addr, close_tx, test_db)
 }
