@@ -26,9 +26,10 @@ async fn main() -> anyhow::Result<()> {
         .await
         .expect("cannot connect to the database");
 
-    let close_tx = run_server(&service_address, db_pool).await?;
+    let (local_addr, close_tx) = run_server(&service_address, db_pool).await?;
+    tracing::info!("Server listening on {local_addr}");
 
-    tracing::debug!("waiting for {} tasks to finish", close_tx.receiver_count());
+    tracing::info!("waiting for {} tasks to finish", close_tx.receiver_count());
     close_tx.closed().await;
 
     Ok(())

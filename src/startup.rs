@@ -20,7 +20,7 @@ pub struct AppState {
 pub async fn run_server(
     service_address: &str,
     db_pool: sqlx::PgPool,
-) -> anyhow::Result<tokio::sync::watch::Sender<()>> {
+) -> anyhow::Result<(SocketAddr, tokio::sync::watch::Sender<()>)> {
     let router = Router::new()
         .route("/health_check", get(healthcheck))
         .route("/registrations", post(post_registration_handler))
@@ -63,9 +63,7 @@ pub async fn run_server(
 
     drop(close_rx);
 
-    drop(listener);
-
-    Ok(close_tx)
+    Ok((listener.local_addr()?, close_tx))
 }
 
 async fn handle_client(

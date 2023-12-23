@@ -2,7 +2,9 @@ use std::net::SocketAddr;
 
 mod testdatabase;
 
+use registration::startup::run_server;
 use testdatabase::TestDatabase;
+use tokio::sync::watch::Sender;
 
 async fn setup_database() -> Box<TestDatabase> {
     TestDatabase::new(
@@ -16,7 +18,7 @@ async fn setup_database() -> Box<TestDatabase> {
 
 #[tokio::test]
 async fn health_check_works() {
-    let (addr, test_db) = spawn_app().await;
+    let (addr, _, mut test_db) = spawn_app().await;
     let url = format!("http://{}/health_check", addr);
 
     let client = reqwest::Client::new();
@@ -35,7 +37,7 @@ async fn health_check_works() {
 
 #[tokio::test]
 async fn register_returns_200_for_valid_form_data() {
-    let (addr, test_db) = spawn_app().await;
+    let (addr, _, mut test_db) = spawn_app().await;
     eprintln!("test app is running ...");
     let client = reqwest::Client::new();
 
@@ -70,7 +72,7 @@ async fn register_returns_200_for_valid_form_data() {
 /// table-driven test or parametrised test for checking failures of subscriptions
 #[tokio::test]
 async fn register_returns_422_when_data_is_missing() {
-    let (addr, test_db) = spawn_app().await;
+    let (addr, _, mut test_db) = spawn_app().await;
     let client = reqwest::Client::new();
     let test_cases = vec![
         ("name=Max%Mustermann", "missing the email"),
@@ -100,12 +102,12 @@ async fn register_returns_422_when_data_is_missing() {
     test_db.close().await;
 }
 
-async fn spawn_app() -> (SocketAddr, Box<TestDatabase>) {
+async fn spawn_app() -> (SocketAddr, Sender<()>, Box<TestDatabase>) {
     let test_db = setup_database().await;
 
-    let close_tx = registration::startup::run_server("127.0.0.1:0", test_db.connection_pool())
+    let (local_addr, close_tx) = run_server("127.0.0.1:0", test_db.connection_pool().await)
         .await
         .expect("could not bind server address");
 
-    (addr, test_db)
+    (local_addr, close_tx, test_db)
 }
