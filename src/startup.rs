@@ -30,7 +30,7 @@ pub async fn run_server(
         ))
         .with_state(AppState { db_pool });
 
-    println!("bind server address ...");
+    tracing::debug!("bind server address ...");
     let listener = tokio::net::TcpListener::bind(service_address).await?;
     let addr = listener.local_addr()?;
 
@@ -38,7 +38,7 @@ pub async fn run_server(
 
     let join_handle = tokio::spawn(async move {
         loop {
-            eprintln!("start server accept loop");
+            tracing::info!("start server accept loop");
 
             let (socket, remote_addr) = tokio::select! {
                 result = listener.accept() => {
@@ -56,7 +56,7 @@ pub async fn run_server(
                 }
             };
 
-            eprintln!("connection from {remote_addr} accepted");
+            tracing::info!("connection from {remote_addr} accepted");
 
             let tower_service = router.clone();
             let close_rx = close_rx.clone();
@@ -65,7 +65,7 @@ pub async fn run_server(
                 handle_client(socket, remote_addr, tower_service, close_rx).await;
             });
         }
-        eprintln!("exit from loop");
+        tracing::debug!("exit from loop which accepts connections");
     });
 
     Ok((join_handle, addr, close_tx))
@@ -77,7 +77,7 @@ async fn handle_client(
     tower_service: Router,
     close_rx: tokio::sync::watch::Receiver<()>,
 ) {
-    eprintln!("handle client start");
+    tracing::info!("handle client connection from {remote_addr}");
     let socket = TokioIo::new(socket);
 
     let hyper_service = hyper::service::service_fn(move |request: Request<Incoming>| {
@@ -88,15 +88,13 @@ async fn handle_client(
     // `graceful_shutdown` requires a pinned connection.
     let mut conn = std::pin::pin!(conn);
 
-    eprintln!("start loop for handling client");
     loop {
         tokio::select! {
             // Poll the connection. This completes when the client has closed the
             // connection, graceful shutdown has completed, or we encounter a TCP error.
             result = conn.as_mut() => {
-                    eprintln!("poll the connection");
                 if let Err(err) = result {
-                    tracing::debug!("failed to serve connection: {err:#}");
+                    tracing::error!("failed to serve connection: {err:#}");
                 }
                 break;
             }
@@ -106,13 +104,13 @@ async fn handle_client(
             // after starting graceful shutdown. Our `Router` has `TimeoutLayer` so
             // requests will finish after at most 10 seconds.
             _ = shutdown_signal() => {
-                eprintln!("signal received, starting graceful shutdown");
+                tracing::error!("signal received, starting graceful shutdown");
                 conn.as_mut().graceful_shutdown();
             }
         }
     }
 
-    tracing::debug!("connection {remote_addr} closed");
+    tracing::info!("client connection {remote_addr} closed");
 
     // Drop the watch receiver to signal to `main` that this task is done.
     drop(close_rx);
