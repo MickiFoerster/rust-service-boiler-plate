@@ -32,6 +32,8 @@ pub async fn run_server(
 
     tracing::debug!("bind server address ...");
     let listener = tokio::net::TcpListener::bind(service_address).await?;
+    // Now socket is open and client can already connect to it. Therefore, no signal that server
+    // starts to accept connection is needed.
     let addr = listener.local_addr()?;
 
     let (close_tx, close_rx) = tokio::sync::watch::channel(());

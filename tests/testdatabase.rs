@@ -97,7 +97,7 @@ impl Drop for TestDatabase {
         if self.connection_pool.is_some() {
             eprintln!("test database connection pool was not closed");
         } else {
-            eprintln!("test database is dropped");
+            eprintln!("test database was already closed");
         }
     }
 }

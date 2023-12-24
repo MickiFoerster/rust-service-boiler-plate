@@ -37,6 +37,15 @@ async fn health_check_works() {
 
 #[tokio::test]
 async fn register_returns_200_for_valid_form_data() {
+    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "registration=debug,tower_http=info".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
     let (_, addr, _, mut test_db) = spawn_app().await;
     tracing::debug!("test app is running ...");
     let client = reqwest::Client::new();
