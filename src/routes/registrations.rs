@@ -19,8 +19,11 @@ pub async fn post_registration_handler(
     Form(registry_input): Form<RegistrationInput>,
 ) -> Response {
     //tracing::info!("registry_input:{:#?}", registry_input);
-    eprintln!("registry_input:name:{:#?}", registry_input.name);
-    eprintln!("registry_input:email:{:#?}", registry_input.email);
+    tracing::info!(
+        "registration handler for name={:#?}, email={:#?}",
+        registry_input.name,
+        registry_input.email
+    );
 
     let email = registry_input.email.to_lowercase();
     let email = email.trim();

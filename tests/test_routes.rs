@@ -38,7 +38,7 @@ async fn health_check_works() {
 #[tokio::test]
 async fn register_returns_200_for_valid_form_data() {
     let (_, addr, _, mut test_db) = spawn_app().await;
-    eprintln!("test app is running ...");
+    tracing::debug!("test app is running ...");
     let client = reqwest::Client::new();
 
     let url = format!("http://{}/registrations", addr);
@@ -47,7 +47,7 @@ async fn register_returns_200_for_valid_form_data() {
     let expected_email = "max.mustermann@gmail.com";
 
     let body = format!("name={}&email={}", expected_name, expected_email);
-    eprintln!("try to reach to {url}");
+    tracing::debug!("connection opened on endpoint {url}");
     let response = client
         .post(url)
         .header("Content-Type", "application/x-www-form-urlencoded")
@@ -65,7 +65,6 @@ async fn register_returns_200_for_valid_form_data() {
 
     assert_eq!(data.email.expect("no email found"), expected_email);
     assert_eq!(data.name.expect("no name found"), expected_name);
-    eprintln!("test register_returns_200_for_valid_form_data finished");
 
     test_db.close().await;
 }
@@ -83,7 +82,6 @@ async fn register_returns_422_when_data_is_missing() {
 
     for (invalid_body, error_message) in test_cases {
         let url = format!("http://{}/registrations", addr);
-        eprintln!("make call to {url}");
         let response = client
             .post(url)
             .header("Content-Type", "application/x-www-form-urlencoded")
