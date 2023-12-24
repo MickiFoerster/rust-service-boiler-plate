@@ -18,7 +18,6 @@ pub async fn post_registration_handler(
     State(state): State<AppState>,
     Form(registry_input): Form<RegistrationInput>,
 ) -> Response {
-    //tracing::info!("registry_input:{:#?}", registry_input);
     tracing::info!(
         "registration handler for name={:#?}, email={:#?}",
         registry_input.name,
@@ -39,16 +38,25 @@ pub async fn post_registration_handler(
                 $1,
                 $2
             )
+            on conflict (email) do nothing
+            returning id
     "#,
         email,
         name,
     )
-    .execute(&state.db_pool)
+    .fetch_optional(&state.db_pool)
     .await
     .expect("insertion to DB failed");
 
-    std::thread::sleep(std::time::Duration::from_secs(5));
-    tracing::debug!("{:#?}", result);
+    match result {
+        Some(id) => tracing::info!(
+            "name={:#?}, email={:#?} is now registered under ID {:?}",
+            registry_input.name,
+            registry_input.email,
+            id,
+        ),
+        None => tracing::info!("email '{}' is already registered", registry_input.email),
+    }
 
     (StatusCode::OK, Json(serde_json::json!(registry_input))).into_response()
 }

@@ -40,7 +40,7 @@ pub async fn run_server(
 
     let join_handle = tokio::spawn(async move {
         loop {
-            tracing::info!("start server accept loop");
+            tracing::info!("server now waits foc incoming connections ...");
 
             let (socket, remote_addr) = tokio::select! {
                 result = listener.accept() => {
