@@ -1,18 +1,22 @@
 use clap::Parser;
 use registration::cli::Args;
 use registration::startup::run_server;
+use registration::telemetry::{get_subscriber, init_subscriber};
 use sqlx::postgres::PgPoolOptions;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let subscriber = get_subscriber("registry_service".into(), "info".into());
+    init_subscriber(subscriber);
+    /*
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "registration=debug,tower_http=info".into()),
+                .unwrap_or_else(|_| "registration=trace,tower_http=info".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
+        */
 
     let args = Args::parse();
 

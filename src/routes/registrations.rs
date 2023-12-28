@@ -14,20 +14,52 @@ pub struct RegistrationInput {
     pub email: String,
 }
 
+#[tracing::instrument(name = "Register a new user with email", skip(form, state), 
+
+    fields(
+        // FIXME: request id should later be moved into layer from tower service
+        subscriber_name = %form.name,
+        subscriber_email = %form.email,
+        ),
+)]
 pub async fn post_registration_handler(
     State(state): State<AppState>,
-    Form(registry_input): Form<RegistrationInput>,
+    Form(form): Form<RegistrationInput>,
 ) -> Response {
-    tracing::info!(
-        "registration handler for name={:#?}, email={:#?}",
-        registry_input.name,
-        registry_input.email
-    );
-
-    let email = registry_input.email.to_lowercase();
+    let email = form.email.to_lowercase();
     let email = email.trim();
-    let name = registry_input.name.trim();
+    let name = form.name.trim();
 
+    let result = match insert_user(&state.db_pool, name, email).await {
+        Ok(id) => id,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "could not save user data",
+            )
+                .into_response()
+        }
+    };
+
+    match result {
+        Some(id) => tracing::info!(
+            "name={:#?}, email={:#?} is now registered under ID {:?}",
+            form.name,
+            form.email,
+            id,
+        ),
+        None => tracing::info!(": email '{}' is already registered", form.email),
+    }
+
+    (StatusCode::OK, Json(serde_json::json!(form))).into_response()
+}
+
+#[tracing::instrument(name = "Store data in database", skip(pool, name, email))]
+async fn insert_user(
+    pool: &sqlx::PgPool,
+    name: &str,
+    email: &str,
+) -> Result<Option<uuid::Uuid>, sqlx::Error> {
     let result = sqlx::query!(
         r#"
             insert into registrations (
@@ -44,19 +76,14 @@ pub async fn post_registration_handler(
         email,
         name,
     )
-    .fetch_optional(&state.db_pool)
+    .fetch_optional(pool)
     .await
-    .expect("insertion to DB failed");
+    .map_err(|e| {
+        tracing::error!("Failed to execute SQL query: {e}");
 
-    match result {
-        Some(id) => tracing::info!(
-            "name={:#?}, email={:#?} is now registered under ID {:?}",
-            registry_input.name,
-            registry_input.email,
-            id,
-        ),
-        None => tracing::info!("email '{}' is already registered", registry_input.email),
-    }
+        e
+    })?
+    .map(|r| r.id);
 
-    (StatusCode::OK, Json(serde_json::json!(registry_input))).into_response()
+    Ok(result)
 }

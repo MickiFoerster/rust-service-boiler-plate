@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 
 use axum::{
+    body::Body,
     extract::Request,
     routing::{get, post},
     Router,
@@ -24,6 +25,23 @@ pub async fn run_server(
     let router = Router::new()
         .route("/health_check", get(healthcheck))
         .route("/registrations", post(post_registration_handler))
+        .layer(
+            tower_http::trace::TraceLayer::new_for_http().make_span_with(
+                |request: &Request<Body>| {
+                    let request_id = uuid::Uuid::new_v4();
+                    let version = format!("{:#?}", request.version());
+
+                    tracing::span!(
+                        tracing::Level::INFO,
+                        "request",
+                        method = tracing::field::display(request.method()),
+                        uri = tracing::field::display(request.uri()),
+                        version = tracing::field::display(version),
+                        request_id = tracing::field::display(request_id),
+                    )
+                },
+            ),
+        )
         .layer((
             tower_http::trace::TraceLayer::new_for_http(),
             tower_http::timeout::TimeoutLayer::new(std::time::Duration::from_secs(10)),
